@@ -14,7 +14,7 @@
 
     3、二进制操作 & 和 | 
 
-    4、三目表示式  如  x == y ?  xx : yy;
+    4、三目表示式  如  ```x == y ?  xx : yy;```
 - 条件控制
 
     1、if 判断
@@ -29,11 +29,11 @@
 
 - 结构定义
 
-    1、fun 函数定义 如 fun functionName(parameter) {}
+    1、fun 函数定义 如 ```fun functionName(parameter) {}```
 
-    2、var 变量定义 如 var name = "xx";
+    2、var 变量定义 如 ```var name = "xx";```
 
-    3、lambda 如  var a = fun(parameter) {}  或 在函数调用时，直接传入匿名函数
+    3、lambda 如  ```var a = fun(parameter) {} ``` 或 在函数调用时，直接传入匿名函数
 
     4、闭包 
 
