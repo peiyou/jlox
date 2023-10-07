@@ -1,5 +1,6 @@
 package com.lox;
 
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -8,11 +9,12 @@ import static com.lox.TokenType.*;
 /**
  * program        → declaration* EOF ;
  *
- * declaration    →
+ * declaration    → classDecl
  *                | funDecl
  *                | varDecl
  *                | statement ;
  *
+ * classDecl      → classDecl      → "class" IDENTIFIER "{" function*  | ("class" function)* | (IDENTIFIER block) "}" ;
  * funDecl        → "fun" function ;
  * function       → IDENTIFIER "(" parameters? ")" block;
  * parameters     → IDENTIFIER ( "," IDENTIFIER)* ;
@@ -56,7 +58,7 @@ import static com.lox.TokenType.*;
  * comma          → ternary (, ternary) *
  * ternary        → expression ? (expression | ternary) : (expression | ternary);
  * expression     → assignment ;
- * assignment     → IDENTIFIER "=" assignment
+ * assignment     → (call "." )? IDENTIFIER "=" assignment
  *                | or ;
  * or             → and ( "or" and) *;
  * and            → equality ("and" equality) *;
@@ -68,11 +70,11 @@ import static com.lox.TokenType.*;
  * unary          → ( "!" | "-" ) unary | call | selfIncOrDecr | lambda ;
  * lambda         → "fun" "(" parameters? ")" block;
  * selfIncOrDecr  → primary "++" | primary "--"
- * call           → primary ( "(" arguments ")" ) *;
+ * call           → primary ( "(" arguments ")" | "." IDENTIFIER ) *;
  * primary        → NUMBER | STRING | "true" | "false" | "nil"
  *                | "(" comma ")"
- *                | IDENTIFIER ;
- * arguments      → comma ( "," comma ) * ;
+ *                | IDENTIFIER | this ;
+ * arguments      → ternary ( "," ternary ) * ;
  *
  * @author peiyou
  * @version 1.0
@@ -135,8 +137,8 @@ public class Parser {
     }
 
     /**
-     *  assignment     → IDENTIFIER "=" assignment
-     *                 | or ;
+     *  assignment     → (call "." )? IDENTIFIER "=" assignment
+     *                | or ;
      * @return
      */
     private Expr assignment() {
@@ -147,6 +149,9 @@ public class Parser {
             if (expr instanceof Expr.Variable) {
                 Token name = ((Expr.Variable) expr).name;
                 return new Expr.Assign(name, value);
+            } else if (expr instanceof Expr.Get) {
+                Expr.Get get = (Expr.Get) expr;
+                return new Expr.Set(get.object, get.name, value);
             }
             error(equals, "无效的赋值.");
         }
@@ -183,6 +188,7 @@ public class Parser {
      */
     private Stmt declaration() {
         try {
+            if (match(CLASS)) return classDeclaration();
             if (check(FUN) && checkNext(IDENTIFIER) && match(FUN)) return funDecl();
             if (match(VAR)) return varDecl();
             return statement();
@@ -190,6 +196,31 @@ public class Parser {
             synchronize();
             return null;
         }
+    }
+
+    // classDecl      → "class" IDENTIFIER "{" function*  | ("class" function)* | (IDENTIFIER block) "}" ;
+    private Stmt classDeclaration() {
+        Token name = consume(IDENTIFIER, "Expect class name.");
+        consume(LEFT_BRACE, "Expect '{' before class body.");
+        List<Stmt.Function> methods = new ArrayList<>();
+        List<Stmt.Function> staticMethods = new ArrayList<>();
+        List<Stmt.Function> getter = new ArrayList<>();
+        while (!check(RIGHT_BRACE) && !isAtEnd()) {
+            if (match(CLASS)) {
+                staticMethods.add(function("staticMethod"));
+            } else if (check(IDENTIFIER) && checkNext(LEFT_BRACE)) {
+                Token getterName = consume(IDENTIFIER, "");
+                consume(LEFT_BRACE, "Expect '{' before block body.");
+                List<Stmt> block = block();
+                List<Token> parameters = new ArrayList<>();
+                Stmt.Function function = new Stmt.Function(getterName, parameters, block);
+                getter.add(function);
+            } else {
+                methods.add(function("method"));
+            }
+        }
+        consume(RIGHT_BRACE, "Expect '}' after class body.");
+        return new Stmt.Class(name, methods, staticMethods, getter);
     }
 
     /**
@@ -204,23 +235,13 @@ public class Parser {
 
     //   function       → IDENTIFIER? "(" parameters? ")" block;
 
-    private Stmt function(String kind) {
+    private Stmt.Function function(String kind) {
         Token name = null;
         if (check(IDENTIFIER)) {
             name = consume(IDENTIFIER, "Expect " + kind + " name.");
         }
         consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
-        List<Token> parameters = new ArrayList<>();
-        // 如果不是 ) 号,说明有参数
-        if (!check(RIGHT_PAREN)) {
-            do {
-                if (parameters.size() >= 255) {
-                    error(peek(), "Can't have more than 255 parameters.");
-                }
-                parameters.add(consume(IDENTIFIER, "Expect parameter name."));
-            } while (match(COMMA));
-        }
-        consume(RIGHT_PAREN, "Expect ')' after parameters.");
+        List<Token> parameters = parseFunctionParameters();
         consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
         List<Stmt> body = block();
         return new Stmt.Function(name, parameters, body);
@@ -482,6 +503,17 @@ public class Parser {
     private Expr lambda() {
         Token token = previous();
         consume(LEFT_PAREN, "Expect '(' after lambda.");
+        List<Token> parameters = parseFunctionParameters();
+        consume(LEFT_BRACE, "Expect '{' before lambda body.");
+        List<Stmt> body = block();
+        return new Expr.Lambda(token, parameters, body);
+    }
+
+    /**
+     * 解析方法中的参数
+     * @return
+     */
+    private List<Token> parseFunctionParameters() {
         List<Token> parameters = new ArrayList<>();
         // 如果不是 ) 号,说明有参数
         if (!check(RIGHT_PAREN)) {
@@ -493,9 +525,7 @@ public class Parser {
             } while (match(COMMA));
         }
         consume(RIGHT_PAREN, "Expect ')' after parameters.");
-        consume(LEFT_BRACE, "Expect '{' before lambda body.");
-        List<Stmt> body = block();
-        return new Expr.Lambda(token, parameters, body);
+        return parameters;
     }
 
     // selfIncOrDecr  → primary "++" | primary "--"
@@ -508,12 +538,15 @@ public class Parser {
         return expr;
     }
 
-    // call → primary ( "(" argument ")" ) *
+    // call           → primary ( "(" arguments ")" | "." IDENTIFIER ) *;
     private Expr call() {
         Expr expr = primary();
         while (true) {
             if (match(LEFT_PAREN)) {
                 expr = finishCall(expr);
+            } else if (match(DOT)) {
+                Token name = consume(IDENTIFIER, "Expect property name after '.'.");
+                expr = new Expr.Get(expr, name);
             } else {
                 break;
             }
@@ -528,7 +561,7 @@ public class Parser {
                 if (arguments.size() >= 255) {
                     error(peek(), "参数最多只能有254个。");
                 }
-               arguments.add(comma());
+               arguments.add(ternary());
             } while (match(COMMA));
         }
         Token paren = consume(RIGHT_PAREN, "Expect ')' after arguments.");
@@ -536,7 +569,7 @@ public class Parser {
     }
 
     // primary        → NUMBER | STRING | "true" | "false" | "nil"
-    //               | "(" comma ")" ;
+    //               | "(" comma ")" | this;
     private Expr primary() {
         if (match(FALSE)) return new Expr.Literal(false);
         if (match(TRUE)) return new Expr.Literal(true);
@@ -545,6 +578,8 @@ public class Parser {
         if (match(NUMBER, STRING)) {
             return new Expr.Literal(previous().literal);
         }
+
+        if (match(THIS)) return new Expr.This(previous());
 
         if (match(LEFT_PAREN)) {
             Expr expr = comma();

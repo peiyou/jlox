@@ -68,6 +68,17 @@ public class RPNPrinter implements Expr.Visitor<String> {
         return null;
     }
 
+    @Override
+    public String visitSetExpr(Expr.Set expr) {
+        return null;
+    }
+
+
+    @Override
+    public String visitThisExpr(Expr.This expr) {
+        return null;
+    }
+
     private String reversePolishNotation(String name, Expr... exprs) {
         StringBuilder builder = new StringBuilder();
         for (Expr expr: exprs) {
@@ -76,6 +87,12 @@ public class RPNPrinter implements Expr.Visitor<String> {
         }
         builder.append(name);
         return builder.toString();
+    }
+
+
+    @Override
+    public String visitGetExpr(Expr.Get expr) {
+        return null;
     }
 
     public static void main(String[] args) {

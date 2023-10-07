@@ -2,11 +2,12 @@ package com.lox;
 
 import java.util.List;
 
-abstract class Stmt{
+abstract class Stmt {
 
     abstract <R> R accept(Visitor<R> visitor);
     interface Visitor<R> {
         R visitBlockStmt(Block stmt);
+        R visitClassStmt(Class stmt);
         R visitExpressionStmt(Expression stmt);
         R visitFunctionStmt(Function stmt);
         R visitIfStmt(If stmt);
@@ -27,6 +28,24 @@ abstract class Stmt{
         @Override
         <R> R accept(Visitor<R> visitor) {
             return visitor.visitBlockStmt(this);
+        }
+    }
+    static class Class extends Stmt{
+        Class(Token name, List<Stmt.Function> methods, List<Stmt.Function> staticMethods, List<Stmt.Function> getter) {
+            this.name = name;
+            this.methods = methods;
+            this.staticMethods = staticMethods;
+            this.getter = getter;
+        }
+
+        final Token name;
+        final List<Stmt.Function> methods;
+        final List<Stmt.Function> staticMethods;
+        final List<Stmt.Function> getter;
+
+        @Override
+        <R> R accept(Visitor<R> visitor) {
+            return visitor.visitClassStmt(this);
         }
     }
     static class Expression extends Stmt{

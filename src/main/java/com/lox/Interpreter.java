@@ -180,6 +180,24 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
+    public Object visitSetExpr(Expr.Set expr) {
+        Object object = evaluate(expr.object);
+        if (!(object instanceof LoxInstance)) {
+            throw new RuntimeError(expr.name,
+                    "Only instances have fields.");
+        }
+
+        Object value = evaluate(expr.value);
+        ((LoxInstance)object).set(expr.name, value);
+        return value;
+    }
+
+    @Override
+    public Object visitThisExpr(Expr.This expr) {
+        return lookUpVariable(expr.keyword, expr);
+    }
+
+    @Override
     public Object visitUnaryExpr(Expr.Unary expr) {
         Object right = evaluate(expr.right);
         switch (expr.operator.type) {
@@ -238,6 +256,28 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     @Override
     public Object visitCallExpr(Expr.Call expr) {
         Object callee = evaluate(expr.callee);
+        if (callee == null) {
+            if (expr.callee instanceof Expr.Get) {
+                Expr.Get get = (Expr.Get) expr.callee;
+                Expr.Variable variable = (Expr.Variable) get.object;
+                Object obj = lookUpVariable(variable.name, variable);
+                if (obj instanceof LoxClass) {
+                    LoxClass klass = (LoxClass) obj;
+                    LoxFunction staticMethod = klass.findStaticMethod(get.name.lexeme);
+                    if (staticMethod == null) {
+                        throw new RuntimeError(expr.paren, "" + get.name.lexeme + "不是静态方法。");
+                    }
+                    List<Object> arguments = new ArrayList<>();
+                    for (Expr argument: expr.arguments) {
+                        arguments.add(evaluate(argument));
+                    }
+                    if (arguments.size() != staticMethod.arity()) {
+                        throw new RuntimeError(expr.paren, "期待 " + staticMethod.arity() + " 个参数，但只传入了 " + arguments.size() + " 个。");
+                    }
+                    return staticMethod.call(this, arguments);
+                }
+            }
+        }
         List<Object> arguments = new ArrayList<>();
         for (Expr argument: expr.arguments) {
             arguments.add(evaluate(argument));
@@ -252,6 +292,19 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         return function.call(this, arguments);
     }
 
+
+    @Override
+    public Object visitGetExpr(Expr.Get expr) {
+        Object object = evaluate(expr.object);
+        if (object instanceof LoxInstance) {
+            Object value = ((LoxInstance) object).get(expr.name);
+            if (value instanceof LoxGetterFunction) {
+                return ((LoxGetterFunction) value).call(this, new ArrayList<>());
+            }
+            return value;
+        }
+        return null;
+    }
 
     @Override
     public Object visitSelfIncOrDecrExpr(Expr.SelfIncOrDecr expr) {
@@ -321,6 +374,32 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         return null;
     }
 
+
+    @Override
+    public Void visitClassStmt(Stmt.Class stmt) {
+        environment.define(stmt.name.lexeme, null);
+        Map<String, LoxFunction> methods = new HashMap<>();
+        for (Stmt.Function method: stmt.methods) {
+            LoxFunction function = new LoxFunction(method, environment, method.name.lexeme.equals("init"));
+            methods.put(method.name.lexeme, function);
+        }
+
+        Map<String, LoxFunction> staticMethods = new HashMap<>();
+        for (Stmt.Function method: stmt.staticMethods) {
+            LoxFunction function = new LoxFunction(method, environment, false);
+            staticMethods.put(method.name.lexeme, function);
+        }
+
+        Map<String, LoxFunction> getter = new HashMap<>();
+        for (Stmt.Function method: stmt.getter) {
+            LoxFunction function = new LoxGetterFunction(method, environment, false);
+            getter.put(method.name.lexeme, function);
+        }
+        LoxClass klass = new LoxClass(stmt.name.lexeme, methods, staticMethods, getter);
+        environment.assign(stmt.name, klass);
+        return null;
+    }
+
     @Override
     public Void visitIfStmt(Stmt.If stmt) {
         if (isTruthy(evaluate(stmt.condition))) {
@@ -359,7 +438,7 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitFunctionStmt(Stmt.Function stmt) {
-        LoxFunction function = new LoxFunction(stmt, environment);
+        LoxFunction function = new LoxFunction(stmt, environment, false);
         environment.define(stmt.name.lexeme, function);
         return null;
     }

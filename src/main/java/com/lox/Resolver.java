@@ -17,11 +17,22 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     private final Stack<Map<String, Boolean>> scopes = new Stack<>();
     private FunctionType currentFunction = FunctionType.NONE;
 
+    private ClassType currentClass = ClassType.NONE;
+
     private enum FunctionType {
         NONE,
         FUNCTION,
         WHILE,
-        FUNCTION_WHILE
+        FUNCTION_WHILE,
+        METHOD,
+        METHOD_WHILE,
+        INITIALIZER,
+        STATIC_METHOD,
+    }
+
+    private enum ClassType {
+        NONE,
+        CLASS
     }
 
     public Resolver(Interpreter interpreter) {
@@ -33,6 +44,37 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         beginScope();
         resolve(stmt.statements);
         endScope();
+        return null;
+    }
+
+    @Override
+    public Void visitClassStmt(Stmt.Class stmt) {
+        ClassType enclosingClass = currentClass;
+        currentClass = ClassType.CLASS;
+        declare(stmt.name);
+        define(stmt.name);
+        beginScope();
+        scopes.peek().put("this", true);
+        for (Stmt.Function method: stmt.methods) {
+            FunctionType declaration = FunctionType.METHOD;
+            if (method.name.lexeme.equals("init")) {
+                declaration = FunctionType.INITIALIZER;
+            }
+            resolveFunction(method, declaration);
+        }
+
+        for (Stmt.Function method: stmt.staticMethods) {
+            FunctionType declaration = FunctionType.STATIC_METHOD;
+            resolveFunction(method, declaration);
+        }
+        endScope();
+        currentClass = enclosingClass;
+        return null;
+    }
+
+    @Override
+    public Void visitGetExpr(Expr.Get expr) {
+        resolve(expr.object);
         return null;
     }
 
@@ -109,6 +151,10 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         }
 
         if (stmt.value != null) {
+            if (currentFunction == FunctionType.INITIALIZER) {
+                Lox.error(stmt.token,
+                        "Can't return a value from an initializer.");
+            }
             resolve(stmt.value);
         }
         return null;
@@ -119,6 +165,8 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
         FunctionType enclosingFunction = currentFunction;
         if (enclosingFunction == FunctionType.FUNCTION) {
             currentFunction = FunctionType.FUNCTION_WHILE;
+        } else if (enclosingFunction == FunctionType.METHOD) {
+            currentFunction = FunctionType.METHOD_WHILE;
         } else {
             currentFunction = FunctionType.WHILE;
         }
@@ -163,6 +211,28 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     }
 
     @Override
+    public Void visitSetExpr(Expr.Set expr) {
+        resolve(expr.value);
+        resolve(expr.object);
+        return null;
+    }
+
+    @Override
+    public Void visitThisExpr(Expr.This expr) {
+        if (currentClass == ClassType.NONE) {
+            Lox.error(expr.keyword, "不能在class外面使用'this'关键字。");
+            return null;
+        }
+        if (currentFunction == FunctionType.STATIC_METHOD) {
+            Lox.error(expr.keyword, "不能在静态方法使用'this'关键字。");
+            return null;
+        }
+
+        resolveLocal(expr, expr.keyword);
+        return null;
+    }
+
+    @Override
     public Void visitUnaryExpr(Expr.Unary expr) {
         resolve(expr.right);
         return null;
@@ -170,7 +240,7 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitBreakStmt(Stmt.Break stmt) {
-        if (currentFunction == FunctionType.NONE || FunctionType.FUNCTION == currentFunction) {
+        if (currentFunction == FunctionType.NONE || FunctionType.FUNCTION == currentFunction || FunctionType.METHOD == currentFunction) {
             Lox.error(stmt.token, "Can't break from top-level code.");
         }
         return null;
@@ -178,7 +248,7 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitContinueStmt(Stmt.Continue stmt) {
-        if (currentFunction == FunctionType.NONE || FunctionType.FUNCTION == currentFunction) {
+        if (currentFunction == FunctionType.NONE || FunctionType.FUNCTION == currentFunction || FunctionType.METHOD == currentFunction) {
             Lox.error(stmt.token, "Can't continue from top-level code.");
         }
         return null;

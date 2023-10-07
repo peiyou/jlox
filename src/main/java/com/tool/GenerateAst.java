@@ -24,9 +24,12 @@ public class GenerateAst {
                 "Assign   : Token name, Expr value",
                 "Binary   : Expr left, Token operator, Expr right",
                 "Call     : Expr callee, Token paren, List<Expr> arguments",
+                "Get      : Expr object, Token name",
                 "Grouping : Expr expression",
                 "Literal  : Object value",
                 "Logical  : Expr left, Token operator, Expr right",
+                "Set      : Expr object, Token name, Expr value",
+                "This     : Token keyword",
                 "Unary    : Token operator, Expr right",
                 "Ternary  : Expr condition, Expr left, Expr right",
                 "Variable : Token name",
@@ -36,6 +39,7 @@ public class GenerateAst {
 
         defineAst(outputDir, "Stmt", Arrays.asList(
                 "Block      : List<Stmt> statements",
+                "Class      : Token name, List<Stmt.Function> methods, List<Stmt.Function> staticMethods, List<Stmt.Function> getter",
                 "Expression : Expr expression",
                 "Function   : Token name, List<Token> params, List<Stmt> body",
                 "If         : Expr condition, Stmt thenBranch, Stmt elseBranch",
@@ -65,7 +69,7 @@ public class GenerateAst {
         writer.println();
         writer.println("import java.util.List;");
         writer.println();
-        writer.println("abstract class " + baseName + "{");
+        writer.println("abstract class " + baseName + " {");
 
         writer.println();
         writer.println("    abstract <R> R accept(Visitor<R> visitor);");
