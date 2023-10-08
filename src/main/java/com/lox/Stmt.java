@@ -31,17 +31,19 @@ abstract class Stmt {
         }
     }
     static class Class extends Stmt{
-        Class(Token name, List<Stmt.Function> methods, List<Stmt.Function> staticMethods, List<Stmt.Function> getter) {
+        Class(Token name, List<Stmt.Function> methods, List<Stmt.Function> staticMethods, List<Stmt.Function> getter, Expr.Variable superclass) {
             this.name = name;
             this.methods = methods;
             this.staticMethods = staticMethods;
             this.getter = getter;
+            this.superclass = superclass;
         }
 
         final Token name;
         final List<Stmt.Function> methods;
         final List<Stmt.Function> staticMethods;
         final List<Stmt.Function> getter;
+        final Expr.Variable superclass;
 
         @Override
         <R> R accept(Visitor<R> visitor) {

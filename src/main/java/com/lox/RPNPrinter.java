@@ -79,6 +79,12 @@ public class RPNPrinter implements Expr.Visitor<String> {
         return null;
     }
 
+
+    @Override
+    public String visitSuperExpr(Expr.Super expr) {
+        return null;
+    }
+
     private String reversePolishNotation(String name, Expr... exprs) {
         StringBuilder builder = new StringBuilder();
         for (Expr expr: exprs) {

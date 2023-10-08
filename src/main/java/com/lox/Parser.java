@@ -14,7 +14,7 @@ import static com.lox.TokenType.*;
  *                | varDecl
  *                | statement ;
  *
- * classDecl      → classDecl      → "class" IDENTIFIER "{" function*  | ("class" function)* | (IDENTIFIER block) "}" ;
+ * classDecl      → "class" IDENTIFIER ( "<" IDENTIFIER )? "{" function*  | ("class" function)* | (IDENTIFIER block) "}" ;
  * funDecl        → "fun" function ;
  * function       → IDENTIFIER "(" parameters? ")" block;
  * parameters     → IDENTIFIER ( "," IDENTIFIER)* ;
@@ -73,7 +73,7 @@ import static com.lox.TokenType.*;
  * call           → primary ( "(" arguments ")" | "." IDENTIFIER ) *;
  * primary        → NUMBER | STRING | "true" | "false" | "nil"
  *                | "(" comma ")"
- *                | IDENTIFIER | this ;
+ *                | IDENTIFIER | "this" | "super" "." IDENTIFIER;
  * arguments      → ternary ( "," ternary ) * ;
  *
  * @author peiyou
@@ -198,9 +198,15 @@ public class Parser {
         }
     }
 
-    // classDecl      → "class" IDENTIFIER "{" function*  | ("class" function)* | (IDENTIFIER block) "}" ;
+    // classDecl      → "class" IDENTIFIER ( "<" IDENTIFIER )? "{" function*  | ("class" function)* | (IDENTIFIER block) "}" ;
     private Stmt classDeclaration() {
         Token name = consume(IDENTIFIER, "Expect class name.");
+        Expr.Variable superclass = null;
+        if (match(LESS)) {
+            consume(IDENTIFIER, "Expect superclass name.");
+            superclass = new Expr.Variable(previous());
+        }
+
         consume(LEFT_BRACE, "Expect '{' before class body.");
         List<Stmt.Function> methods = new ArrayList<>();
         List<Stmt.Function> staticMethods = new ArrayList<>();
@@ -220,7 +226,7 @@ public class Parser {
             }
         }
         consume(RIGHT_BRACE, "Expect '}' after class body.");
-        return new Stmt.Class(name, methods, staticMethods, getter);
+        return new Stmt.Class(name, methods, staticMethods, getter, superclass);
     }
 
     /**
@@ -569,7 +575,7 @@ public class Parser {
     }
 
     // primary        → NUMBER | STRING | "true" | "false" | "nil"
-    //               | "(" comma ")" | this;
+    //               | "(" comma ")" | IDENTIFIER | "this" | "super" "." IDENTIFIER;
     private Expr primary() {
         if (match(FALSE)) return new Expr.Literal(false);
         if (match(TRUE)) return new Expr.Literal(true);
@@ -577,6 +583,14 @@ public class Parser {
 
         if (match(NUMBER, STRING)) {
             return new Expr.Literal(previous().literal);
+        }
+
+        if (match(SUPER)) {
+            Token keyword = previous();
+            consume(DOT, "Expect '.' after 'super'.");
+            Token method = consume(IDENTIFIER,
+                    "Expect superclass method name.");
+            return new Expr.Super(keyword, method);
         }
 
         if (match(THIS)) return new Expr.This(previous());

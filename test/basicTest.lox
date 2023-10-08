@@ -1,0 +1,31 @@
+
+class Student {
+    init(name, age) {
+        this.name = name;
+        this.age = age;
+    }
+
+    a() {
+        print this.name;
+    }
+
+    name1 {
+        print this.name;
+        return this.name;
+    }
+
+    age1 {
+        print this.age;
+        return this.age;
+    }
+
+    class show(school) {
+        print school;
+    }
+}
+
+var student = Student("张三", 80);
+student.a();
+print student.name;
+print student.age;
+Student.show("学校");
